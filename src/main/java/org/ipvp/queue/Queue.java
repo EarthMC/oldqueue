@@ -28,7 +28,7 @@ public class Queue extends Vector<QueuedPlayer>
 
     private TimedList rememberedPlayers = new TimedList();
 
-    ReentrantLock lock = new ReentrantLock();
+    private ReentrantLock lock = new ReentrantLock();
 
     public Queue(QueuePlugin plugin, ServerInfo target)
     {
@@ -172,7 +172,7 @@ public class Queue extends Vector<QueuedPlayer>
      * Removes the player from the queue, respecting the lock on the queue
      * @param player The player to remove from the queue
      */
-    public void remove_player(QueuedPlayer player) {
+    public void removePlayer(QueuedPlayer player) {
         lock.lock();
         try {
             remove(player);
