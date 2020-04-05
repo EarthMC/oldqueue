@@ -35,7 +35,7 @@ public class LeaveCommand extends QueuePluginCommand
                 try
                 {
                     queue.rememberPosition(player.getName(), queued.getPosition());
-                    queue.removePlayer(queued);
+                    queue.remove(queued);
                 }
                 catch(NullPointerException e)
                 {
