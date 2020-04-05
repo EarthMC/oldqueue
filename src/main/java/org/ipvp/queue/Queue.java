@@ -7,6 +7,7 @@ import net.md_5.bungee.api.connection.ProxiedPlayer;
 
 import java.util.*;
 import java.util.logging.Level;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static net.md_5.bungee.api.ChatColor.*;
 
@@ -26,6 +27,8 @@ public class Queue extends Vector<QueuedPlayer>
     public long unpauseTime = Long.MAX_VALUE;
 
     private TimedList rememberedPlayers = new TimedList();
+
+    ReentrantLock lock = new ReentrantLock();
 
     public Queue(QueuePlugin plugin, ServerInfo target)
     {
@@ -130,31 +133,51 @@ public class Queue extends Vector<QueuedPlayer>
             }
         }
 
-        try
-        {
-            player.setQueue(this);
-            int index = getInsertionIndex(player);
-            if(index < 0 || index >= size())
+        // Lock the player queue
+        lock.lock();
+        try {
+            try
             {
+                player.setQueue(this);
+                int index = getInsertionIndex(player);
+                if(index < 0 || index >= size())
+                {
+                    add(player);
+                }
+                else
+                {
+                    add(index, player);
+                }
+            }
+            catch(NullPointerException | IndexOutOfBoundsException e)
+            {
+                // Player is added at the end if an error occured when trying to find their position
+                player.setQueue(this);
                 add(player);
             }
-            else
-            {
-                add(index, player);
-            }
+        } finally {
+            lock.unlock();
         }
-        catch(NullPointerException | IndexOutOfBoundsException e)
-        {
-            // Player is added at the end if an error occured when trying to find their position
-            player.setQueue(this);
-            add(player);
-        }
+
         player.getHandle().sendMessage(TextComponent.fromLegacyText(ChatColor.GREEN + "You have joined the queue for " + QueuePlugin.capitalizeFirstLetter(target.getName())));
         player.getHandle().sendMessage(TextComponent.fromLegacyText(String.format(YELLOW + "You are currently in position " + GREEN + "%d " + YELLOW + "of " + GREEN + "%d", player.getPosition() + 1, size())));
         SendPriorityMessage(player.getHandle());
         if (paused)
         {
             player.getHandle().sendMessage(TextComponent.fromLegacyText(ChatColor.GRAY + "The queue you are currently in is paused"));
+        }
+    }
+
+    /**
+     * Removes the player from the queue, respecting the lock on the queue
+     * @param player The player to remove from the queue
+     */
+    public void remove_player(QueuedPlayer player) {
+        lock.lock();
+        try {
+            remove(player);
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -266,78 +289,83 @@ public class Queue extends Vector<QueuedPlayer>
      */
     public void sendNext()
     {
-        if (!canSend())
-        {
-            return;
-        }
-
-        if(failedAttempts >= 5)
-        {
-            paused = true;
-            unpauseTime = System.currentTimeMillis() + 20000;
-            QueuePlugin.instance.debugError("Queue is paused for 30 seconds due to repeated failed attempts to send players.");
-            for (QueuedPlayer player : this)
+        lock.lock();
+        try {
+            if (!canSend())
             {
-                player.getHandle().sendMessage(TextComponent.fromLegacyText(RED + "Queue is paused for 30 seconds as the target server refused the last 5 players."));
+                return;
             }
-            return;
-        }
 
-        lastSentTime = System.currentTimeMillis();
-        QueuedPlayer next = remove(0);
-        if(next == null)
-        {
-            return;
-        }
-
-        if(next.getHandle() == null)
-		{
-			return;
-		}
-
-        next.setQueue(null);
-
-        if (next.getHandle().getServer().getInfo().getName().equals(this.target.getName()))
-        {
-            return;
-        }
-
-        next.getHandle().sendMessage(TextComponent.fromLegacyText(GREEN + "Sending you to " + QueuePlugin.capitalizeFirstLetter(getTarget().getName()) + "..."));
-        this.rememberPosition(next.getHandle().getName(), 0);
-
-        plugin.getLogger().log(Level.INFO, "Preparing to send " + next.getHandle().getName() + " to " + target.getName() + " via Queue.");
-
-        next.getHandle().connect(target, (result, error) ->
-        {
-            // What do we do if they can't connect?
-            if (result)
+            if(failedAttempts >= 5)
             {
-                try
+                paused = true;
+                unpauseTime = System.currentTimeMillis() + 20000;
+                QueuePlugin.instance.debugError("Queue is paused for 30 seconds due to repeated failed attempts to send players.");
+                for (QueuedPlayer player : this)
                 {
-                    plugin.getLogger().log(Level.INFO, next.getHandle().getName() + " was sent to " + target.getName() + " via Queue.");
-                    next.getHandle().sendMessage(TextComponent.fromLegacyText(GREEN + "You have been sent to " + QueuePlugin.capitalizeFirstLetter(getTarget().getName()) + ""));
-                    failedAttempts = 0;
-                    sendProgressMessages();
+                    player.getHandle().sendMessage(TextComponent.fromLegacyText(RED + "Queue is paused for 30 seconds as the target server refused the last 5 players."));
                 }
-                catch(Exception e)
-                {
-                    plugin.debugError("[ConnectHandler] Something happened after successful connection: " + e);
-                }
+                return;
             }
-            else
-            {
-                QueuePlugin.instance.debugError("[SendNext] Failed to send player " + next.getHandle().getName() + " to server " + target.getName() + ". Error: " + error);
-                next.getHandle().sendMessage(TextComponent.fromLegacyText(RED + "Unable to connect to " + QueuePlugin.capitalizeFirstLetter(getTarget().getName()) + "."));
-                next.getHandle().sendMessage(TextComponent.fromLegacyText(RED + "Attempting to requeue you..."));
 
-                // Gets the player object again to make sure there isn't some concurrent modification issue with bungeecord causing issues.
-                QueuedPlayer newPlayer = plugin.getQueued(plugin.getProxy().getPlayer(next.getHandle().getName()));
-                newPlayer.setQueue(this);
-                add(0, newPlayer);
-                failedAttempts++;
-                QueuePlugin.instance.debugError("Failed count is now at " + failedAttempts);
-                lastSentTime = System.currentTimeMillis() + 1000;
+            lastSentTime = System.currentTimeMillis();
+            QueuedPlayer next = remove(0);
+            if(next == null)
+            {
+                return;
             }
-        });
+
+            if(next.getHandle() == null)
+            {
+                return;
+            }
+
+            next.setQueue(null);
+
+            if (next.getHandle().getServer().getInfo().getName().equals(this.target.getName()))
+            {
+                return;
+            }
+
+            next.getHandle().sendMessage(TextComponent.fromLegacyText(GREEN + "Sending you to " + QueuePlugin.capitalizeFirstLetter(getTarget().getName()) + "..."));
+            this.rememberPosition(next.getHandle().getName(), 0);
+
+            plugin.getLogger().log(Level.INFO, "Preparing to send " + next.getHandle().getName() + " to " + target.getName() + " via Queue.");
+
+            next.getHandle().connect(target, (result, error) ->
+            {
+                // What do we do if they can't connect?
+                if (result)
+                {
+                    try
+                    {
+                        plugin.getLogger().log(Level.INFO, next.getHandle().getName() + " was sent to " + target.getName() + " via Queue.");
+                        next.getHandle().sendMessage(TextComponent.fromLegacyText(GREEN + "You have been sent to " + QueuePlugin.capitalizeFirstLetter(getTarget().getName()) + ""));
+                        failedAttempts = 0;
+                        sendProgressMessages();
+                    }
+                    catch(Exception e)
+                    {
+                        plugin.debugError("[ConnectHandler] Something happened after successful connection: " + e);
+                    }
+                }
+                else
+                {
+                    QueuePlugin.instance.debugError("[SendNext] Failed to send player " + next.getHandle().getName() + " to server " + target.getName() + ". Error: " + error);
+                    next.getHandle().sendMessage(TextComponent.fromLegacyText(RED + "Unable to connect to " + QueuePlugin.capitalizeFirstLetter(getTarget().getName()) + "."));
+                    next.getHandle().sendMessage(TextComponent.fromLegacyText(RED + "Attempting to requeue you..."));
+
+                    // Gets the player object again to make sure there isn't some concurrent modification issue with bungeecord causing issues.
+                    QueuedPlayer newPlayer = plugin.getQueued(plugin.getProxy().getPlayer(next.getHandle().getName()));
+                    newPlayer.setQueue(this);
+                    add(0, newPlayer);
+                    failedAttempts++;
+                    QueuePlugin.instance.debugError("Failed count is now at " + failedAttempts);
+                    lastSentTime = System.currentTimeMillis() + 1000;
+                }
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 }
