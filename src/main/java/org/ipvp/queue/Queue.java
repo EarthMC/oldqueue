@@ -7,7 +7,6 @@ import net.md_5.bungee.api.connection.ProxiedPlayer;
 
 import java.util.*;
 import java.util.logging.Level;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static net.md_5.bungee.api.ChatColor.*;
 
