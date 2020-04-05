@@ -338,7 +338,7 @@ public class QueuePlugin extends Plugin implements Listener
             try
             {
                 queue.rememberPosition(player.getName(), queued.getPosition());
-                queue.remove(queued);
+                queue.removePlayer(queued);
             }
             catch (NullPointerException e)
             {
