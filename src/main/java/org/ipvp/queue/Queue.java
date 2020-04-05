@@ -247,14 +247,20 @@ public class Queue extends Vector<QueuedPlayer>
         }
 
         // Changed to not place priority players in the first 3 slots
+        int slot = 0;
         for (int i = 3; i < size(); i++)
         {
-            if (playerWeight > get(i).getPriority())
+            if (playerWeight <= get(i).getPriority())
             {
-                return i+1;
+                slot = i+1;
             }
         }
-        return size();
+
+        if (slot >= size()) {
+            return size();
+        } else {
+            return slot;
+        }
     }
 
     private void sendProgressMessages()
