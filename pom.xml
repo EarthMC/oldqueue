@@ -6,7 +6,7 @@
 
     <groupId>org.ipvp</groupId>
     <artifactId>Queue</artifactId>
-    <version>2.7.7-1.15</version>
+    <version>2.7.8-1.16</version>
     <name>Queue</name>
     <description>Bungeecord server queue connector</description>
 
@@ -45,7 +45,7 @@
         <dependency>
             <groupId>net.md-5</groupId>
             <artifactId>bungeecord-api</artifactId>
-            <version>1.15-SNAPSHOT</version>
+            <version>1.16-R0.4-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
