@@ -106,6 +106,11 @@ public class QueueCommand extends QueuePluginCommand
                 }
                 case "reload":
                 {
+                    if(!sender.hasPermission("queue.reload")) {
+                        sender.sendMessage(TextComponent.fromLegacyText(RED + "You don't have permission to use /queue reload."));
+                        return;
+                    }
+                    
                     plugin.refreshMaxPlayers();
                     try
                     {
